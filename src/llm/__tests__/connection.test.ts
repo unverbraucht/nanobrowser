@@ -167,6 +167,14 @@ describe('the probes', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('says the server-setup fix only for a server the user runs', async () => {
+    const refused = vi.fn(async () => new Response('', { status: 403 })) as unknown as typeof globalThis.fetch;
+    const run = (baseUrl: string) =>
+      testConnection({ kind: 'openai-compatible', modelName: 'm', baseUrl }, { fetch: refused });
+    expect((await run('http://localhost:8000/v1')).originRefused).toBe(true);
+    expect((await run('https://api.example.com/v1')).originRefused).toBe(false);
+  });
+
   it('fails a stream that ends without a word', async () => {
     const fetch = vi.fn(
       async () => new Response('', { headers: { 'content-type': 'text/event-stream' } }),

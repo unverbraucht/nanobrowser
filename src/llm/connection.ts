@@ -2,11 +2,11 @@
 // worker command.
 import { CHAT_COMPLETIONS_KINDS, createModel, DEFAULT_BASE_URLS, openAICompatibleBaseUrl } from './providers';
 import type { CreateModelOptions, ModelSpec } from './providers';
+import { isCloudEndpoint, NOT_CHAT } from './catalogue';
 import { isOriginRefused } from './errors';
 import { refusesImages, refusesReasoning, streamTurn } from './stream';
 import type { TurnRequest, TurnResult } from './stream';
 import type { LearntFacts } from './profiles';
-import { NOT_CHAT } from './catalogue';
 import type { WireEffort } from './catalogue';
 
 export interface ConnectionResult {
@@ -78,7 +78,12 @@ export async function testConnection(
   };
   const result = await streamTurn(probe);
   if (result.error) {
-    const local = spec.kind === 'ollama' || spec.kind === 'lmstudio' || spec.kind === 'openai-compatible';
+    // The server-setup fix is for a server the user runs, not for a cloud host: the OpenAI-compatible card is one at a
+    // public address, and its refusals or dead streams are stated, not dressed as a CORS setting.
+    const local =
+      spec.kind === 'ollama' ||
+      spec.kind === 'lmstudio' ||
+      (spec.kind === 'openai-compatible' && !isCloudEndpoint(spec.kind, spec.baseUrl));
     return {
       ok: false,
       toolCalling: false,

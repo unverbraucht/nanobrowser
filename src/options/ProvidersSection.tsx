@@ -3,7 +3,7 @@
 // src/llm from this page; settings are written through chrome.storage, with no worker command.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { listModels } from '@src/llm';
+import { isCloudEndpoint, listModels } from '@src/llm';
 import type { ConnectionResult, ModelList, ProviderKind } from '@src/llm';
 import type { ReasoningEffort } from '@src/llm/catalogue';
 import {
@@ -318,7 +318,10 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
 function ProviderItem({ provider }: { provider: ProviderConfig }) {
   const keys = useStorage(keysStorage, EMPTY_KEYS);
   const info = kindInfo(provider.kind);
+  // `local` names the card with an address field; `serverLocal` is a server the user runs, whose refusal of the
+  // extension's own origin is a setting to fix. A cloud host's failure of that kind is a dead server, not a setting.
   const local = LOCAL_KINDS.has(provider.kind) || provider.kind === 'openai-compatible';
+  const serverLocal = local && !isCloudEndpoint(provider.kind, provider.baseUrl);
   const [newModel, setNewModel] = useState('');
   const [listed, setListed] = useState<ModelList>({ models: [], hidden: [] });
   const [showAll, setShowAll] = useState(false);
@@ -347,7 +350,7 @@ function ProviderItem({ provider }: { provider: ProviderConfig }) {
     } catch (error) {
       if (asked !== listAsked.current) return;
       setListed({ models: [], hidden: [] });
-      setListError(listProblem(error, local));
+      setListError(listProblem(error, serverLocal));
     } finally {
       if (asked === listAsked.current) setListing(false);
     }
