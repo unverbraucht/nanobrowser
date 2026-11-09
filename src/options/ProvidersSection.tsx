@@ -46,6 +46,7 @@ const EMPTY_KEYS: Record<string, string> = {};
  */
 const PRESETS: Array<{ id: string; label: string; baseUrl: string }> = [
   { id: 'xai', label: 'xAI Grok', baseUrl: 'https://api.x.ai/v1' },
+  { id: 'langdock', label: 'LangDock', baseUrl: 'https://api.langdock.com/openai/global/v1' },
   { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
   { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1' },
 ];
@@ -67,7 +68,20 @@ function kindInfo(kind: ProviderKind) {
 
 /** Whether a provider needs a key: its kind does, or it is a preset, a cloud service that always does. */
 function needsKey(provider: ProviderConfig): boolean {
-  return kindInfo(provider.kind).needsKey || PRESETS.some(p => p.baseUrl === provider.baseUrl);
+  return kindInfo(provider.kind).needsKey || isPresetHost(provider.baseUrl);
+}
+
+/**
+ * A preset's host, so an edited URL still keeps the key required as long as it stays at the provider: LangDock's
+ * address carries a region segment (`/openai/<region>/v1`) the user fills in.
+ */
+function isPresetHost(baseUrl: string | undefined): boolean {
+  try {
+    const host = new URL(baseUrl ?? '').hostname;
+    return PRESETS.some(p => new URL(p.baseUrl).hostname === host);
+  } catch {
+    return false;
+  }
 }
 
 function updateProvider(id: string, patch: Partial<ProviderConfig>): Promise<void> {
