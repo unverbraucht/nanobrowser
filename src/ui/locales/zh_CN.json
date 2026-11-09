@@ -44,6 +44,7 @@
   "models.listedOf": "已列出 {count} / {total} 个模型",
   "models.listing": "正在列出模型…",
   "models.keyRefused": "服务商没有接受这个密钥。请检查后再保存一次。",
+  "models.saveKeyFirst": "请先保存 API 密钥。",
   "models.showAll": "显示全部",
   "models.noToolCalling": "不支持工具调用",
   "models.test": "测试模型",

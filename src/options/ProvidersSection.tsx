@@ -46,7 +46,7 @@ const EMPTY_KEYS: Record<string, string> = {};
  */
 const PRESETS: Array<{ id: string; label: string; baseUrl: string }> = [
   { id: 'xai', label: 'xAI Grok', baseUrl: 'https://api.x.ai/v1' },
-  { id: 'langdock', label: 'LangDock', baseUrl: 'https://api.langdock.com/openai/global/v1' },
+  { id: 'langdock', label: 'LangDock', baseUrl: 'https://api.langdock.com/openai/eu/v1' },
   { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
   { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1' },
 ];
@@ -333,8 +333,9 @@ function ProviderItem({ provider }: { provider: ProviderConfig }) {
   const key = keys[provider.id] ?? '';
   const name = provider.name.trim();
 
-  /** Lists the models with `apiKey`, the key just saved when called on saving it. */
+  /** Lists the models with `apiKey`, the key just saved when called on saving it. A provider that needs a key waits for it: an unsaved key is not sent, and an empty header would be the server's refusal to guess, not the key's. */
   const fetchModels = async (apiKey = key) => {
+    if (needsKey(provider) && !apiKey) return;
     const asked = ++listAsked.current;
     setListError(null);
     setListing(true);
@@ -486,6 +487,9 @@ function ProviderItem({ provider }: { provider: ProviderConfig }) {
               onFocus={() => (urlAtFocus.current = provider.baseUrl ?? '')}
               onBlur={() => {
                 if (urlAtFocus.current !== null && urlAtFocus.current !== (provider.baseUrl ?? '')) {
+                  // The address is part of what a list was asked for, so it is asked again, with the saved key if
+                  // there is one (LangDock's region is in the address; the key stays at the same host).
+                  if (key) void fetchModels();
                   runTests(
                     provider.models.map(m => m.name),
                     'add',
@@ -530,7 +534,11 @@ function ProviderItem({ provider }: { provider: ProviderConfig }) {
               ))}
             </datalist>
             <Button onClick={() => void addModel(newModel)}>{t('common.add')}</Button>
-            <Button variant="ghost" onClick={() => void fetchModels()}>
+            <Button
+              variant="ghost"
+              disabled={needsKey(provider) && !key}
+              title={needsKey(provider) && !key ? t('models.saveKeyFirst') : undefined}
+              onClick={() => void fetchModels()}>
               {t('models.fetchModels')}
             </Button>
             {listing ? (

@@ -44,6 +44,7 @@
   "models.listedOf": "{count} of {total} models listed",
   "models.listing": "Listing models…",
   "models.keyRefused": "The provider did not accept this key. Check it and save it again.",
+  "models.saveKeyFirst": "Save the API key first.",
   "models.showAll": "Show all",
   "models.noToolCalling": "No tool calling",
   "models.test": "Test models",
