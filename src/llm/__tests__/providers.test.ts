@@ -125,6 +125,34 @@ describe('providers', () => {
     expect(r.url).toBe('https://openrouter.ai/api/v1/chat/completions');
     expect(r.headers.get('x-title')).toBe('Nanobrowser');
   });
+
+  // The SDK strips `none` from a model whose name its capability table knows (gpt-6.1-terra takes low to max only),
+  // so the row's toolsNeedNone fact is restored at the request.
+  it('a model that needs None beside its tools is sent it, even when the SDK dropped it', async () => {
+    const r = await capture({ kind: 'openai-compatible', modelName: 'gpt-6.1-terra', apiKey: 'x' });
+    expect(r.body.reasoning_effort).toBe('none');
+    expect(r.body.tools).toBeDefined();
+  });
+
+  it('the same name without tools is sent without the field', async () => {
+    const spec: ModelSpec = { kind: 'openai-compatible', modelName: 'gpt-6.1-terra', apiKey: 'x' };
+    const { fetch, requests } = captureFetch();
+    await streamTurn({ chat: createModel(spec, { fetch }), system: 's', messages: [{ role: 'user', content: 'hi' }] });
+    expect(requests[0].body.reasoning_effort).toBeUndefined();
+  });
+
+  it('a model without the fact keeps the effort the caller sent', async () => {
+    const spec: ModelSpec = { kind: 'openai-compatible', modelName: 'deepseek-v4.1-flash', apiKey: 'x' };
+    const { fetch, requests } = captureFetch();
+    await streamTurn({
+      chat: createModel(spec, { fetch }),
+      system: 's',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools,
+      reasoning: 'medium',
+    });
+    expect(requests[0].body.reasoning_effort).toBe('medium');
+  });
 });
 
 describe('helpers', () => {

@@ -5,6 +5,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogle } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel } from 'ai';
+import { findRow } from './catalogue';
 
 export type ProviderKind =
   'anthropic' | 'openai' | 'gemini' | 'openai-compatible' | 'ollama' | 'lmstudio' | 'openrouter';
@@ -103,6 +104,12 @@ export function createModel(spec: ModelSpec, options: CreateModelOptions = {}): 
     default: {
       // Ollama, LM Studio, OpenRouter and any other OpenAI-compatible server: chat completions at the base URL.
       const accounting = kind === 'openrouter' ? usageAccounting(fetch ?? globalThis.fetch) : null;
+      // A server that replaces a missing effort with its own default and refuses function tools beside it takes an
+      // explicit `none` in the place of the one the row orders. The SDK would not send it: its own capability table
+      // knows the name and strips `none` from the request (observed on LangDock for its GPT-6.1 models), so the
+      // value is put back at the request, where the row's toolsNeedNone fact is the only word.
+      const withNone = CHAT_COMPLETIONS_KINDS.includes(kind) && findRow(kind, modelName)?.toolsNeedNone === true;
+      const baseFetch: typeof fetch = accounting?.fetch ?? fetch ?? globalThis.fetch;
       const openai = createOpenAI({
         apiKey: apiKey || kind,
         baseURL: openAICompatibleBaseUrl(kind, spec.baseUrl),
@@ -110,7 +117,7 @@ export function createModel(spec: ModelSpec, options: CreateModelOptions = {}): 
           ? { headers: { 'HTTP-Referer': 'https://nanobrowser.ai', 'X-Title': 'Nanobrowser' } }
           : {}),
         // OpenRouter reports a request's cost in its usage when asked.
-        fetch: accounting?.fetch ?? fetch,
+        fetch: withNone ? toolsNeedNoneFetch(baseFetch) : baseFetch,
       });
       return {
         spec,
@@ -120,6 +127,28 @@ export function createModel(spec: ModelSpec, options: CreateModelOptions = {}): 
       };
     }
   }
+}
+
+/**
+ * Tools need None on the wire: every request that carries tools and no effort field is sent again with
+ * `reasoning_effort: 'none'`. Bodies that already carry an effort the row coerced elsewhere are left as they are,
+ * and anything other than a JSON request body passes untouched.
+ */
+export function toolsNeedNoneFetch(base: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    let replacement: string | null = null;
+    if (typeof init?.body === 'string') {
+      try {
+        const body = JSON.parse(init.body) as Record<string, unknown>;
+        if ('tools' in body && !('reasoning_effort' in body)) {
+          replacement = JSON.stringify({ ...body, reasoning_effort: 'none' });
+        }
+      } catch {
+        // Not JSON: sent as it is.
+      }
+    }
+    return init && replacement !== null ? base(input, { ...init, body: replacement }) : base(input, init);
+  };
 }
 
 /**
