@@ -83,6 +83,20 @@ describe('the probes', () => {
     expect(efforts()).toEqual(['low', 'medium', 'high']);
   });
 
+  it('carries `none` beside the tool when the server needs it', async () => {
+    const { fetch, bodies } = probe(() => plain());
+    const r = await testConnection(spec, { fetch }, { toolsNone: true, reasons: true });
+    expect(bodies[0].reasoning_effort).toBe('none');
+    // The row said whether the model reasons, so no follow-up probe adds a word of its own.
+    expect(r.tested).toBeUndefined();
+  });
+
+  it('runs no effort probe when a source already said whether the model reasons', async () => {
+    const { fetch } = probe(() => refuse('unknown field reasoning_effort'));
+    const r = await testConnection(spec, { fetch }, { none: false, reasons: true });
+    expect(r.tested).toBeUndefined();
+  });
+
   it('stops at the first level accepted, and a refused Low says nothing lasting', async () => {
     const { fetch, efforts } = probe(b => (b.reasoning_effort === 'low' ? refuse('reasoning_effort low') : plain()));
     const r = await testConnection(spec, { fetch });
@@ -111,10 +125,12 @@ describe('the probes', () => {
     expect(r.tested).toBeUndefined();
   });
 
+  // When a source has said the model reasons (ask.reasons), the effort probe keeps quiet and None is asked directly:
+  // the wire values are what the probes know nothing else about.
   it('sends None itself when asked, for a model that reasons', async () => {
     const refusing = probe(b => (b.reasoning_effort === 'none' ? refuse('reasoning_effort none') : plain()));
     const r = await testConnection(spec, { fetch: refusing.fetch }, { none: true, reasons: true });
-    expect(refusing.efforts()).toEqual(['low', 'none']);
+    expect(refusing.efforts()).toEqual(['none']);
     expect(r.tested).toEqual({ acceptsNone: false });
     const taking = probe(() => plain());
     expect((await testConnection(spec, { fetch: taking.fetch }, { none: true, reasons: true })).tested).toEqual({
@@ -123,8 +139,13 @@ describe('the probes', () => {
     // Through the row's map: GPT-5 is asked with `minimal`.
     const mapped = probe(() => plain());
     await testConnection(spec, { fetch: mapped.fetch }, { none: true, reasons: true, noneWire: 'minimal' });
-    expect(mapped.efforts()).toEqual(['low', 'minimal']);
-    // Not for a model that does not reason.
+    expect(mapped.efforts()).toEqual(['minimal']);
+    // When no source has said why the model reasons, Low is tried first and None is not asked on an unknown answer.
+    const unknown = probe(() => plain());
+    await testConnection(spec, { fetch: unknown.fetch }, { none: true });
+    expect(unknown.efforts()).toEqual(['low']);
+    expect((await testConnection(spec, { fetch: unknown.fetch }, { none: true })).tested).toBeUndefined();
+    // Not for a model that does not reason. Unknown to every source, Low, Medium and High are tried.
     const not = probe(() => refuse('unknown field reasoning_effort'));
     await testConnection(spec, { fetch: not.fetch }, { none: true });
     expect(not.efforts()).toEqual(['low', 'medium', 'high']);
@@ -144,6 +165,18 @@ describe('the probes', () => {
     const r = await testConnection({ kind: 'anthropic', modelName: 'claude-sonnet-5-5', apiKey: 'k' }, { fetch });
     expect(r.tested).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails a stream that ends without a word', async () => {
+    const fetch = vi.fn(
+      async () => new Response('', { headers: { 'content-type': 'text/event-stream' } }),
+    ) as unknown as typeof globalThis.fetch;
+    const r = await testConnection(spec, { fetch });
+    expect(r).toMatchObject({
+      ok: false,
+      toolCalling: false,
+      error: 'The server ended the response without sending anything.',
+    });
   });
 });
 

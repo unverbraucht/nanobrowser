@@ -267,6 +267,13 @@ async function streamTurnNow(request: TurnRequest): Promise<TurnResult> {
     if (request.signal?.aborted) {
       return { text, toolCalls: [], finish: 'aborted', usage, durationMs: Date.now() - start, attempts: attempt };
     }
+    // A stream that ends without a step and without a word, a reasoning part or a tool call was never a reply. Some
+    // gateways answer 200 and send nothing at all (observed: LangDock's chat endpoint does this for DeepSeek and
+    // company; the SDK calls that finish `interrupted`, since no finish chunk arrived); that is a server failure, not
+    // a model that chose to say nothing, and it is reported as one.
+    if (failure === undefined && usage === null && !started && (finish === 'interrupted' || finish === 'other')) {
+      failure = new Error('The server ended the response without sending anything.');
+    }
     if (failure === undefined) {
       const cost = usage && usage.cost === undefined ? await request.chat.takeCost?.() : undefined;
       if (usage && cost !== undefined) usage = { ...usage, cost };

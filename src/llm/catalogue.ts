@@ -45,6 +45,12 @@ export interface CatalogueRow {
   /** The day the row was last checked, and against what: a URL, or an SDK package, version and function. */
   checked: string;
   source: string;
+  /**
+   * On a chat-completions endpoint, function tools are taken only beside an explicit `reasoning: 'none'`: the server
+   * injects a default effort when the field is absent (observed on LangDock). The test's tool probe and every call to
+   * the model carry `none`. A row that sets it must map every effort to `none` on the wire.
+   */
+  toolsNeedNone?: boolean;
 }
 
 export interface CatalogueDefaults {
@@ -108,6 +114,10 @@ export const rows: CatalogueRow[] = [
   { id: 'gpt-4o', match: /^gpt-4o/, ...cloud(128_000, 16_384), reasoning: 'none', checked: D, source: 'https://developers.openai.com/api/docs/models/gpt-4o' },
   { id: 'gpt-old', match: /^gpt-(3\.5|4)(-turbo|-\d{4})?(-|$)/, ...cloud(128_000, 4096, false), reasoning: 'none', checked: D, source: 'https://developers.openai.com/api/docs/models (GPT-3.5 and GPT-4 do not reason)' },
   { id: 'gpt-oss-cloud', match: /^gpt-oss/, kinds: ['openai', 'openrouter', 'openai-compatible'], ...cloud(131_072, 131_072, false), reasoning: 'optional', checked: D, source: 'https://openrouter.ai/api/v1/models (gpt-oss: text in, reasoning effort low to high)' },
+  // On a chat-completions endpoint, the gateway refuses function tools without an explicit `none`: it injects a default
+  // effort when none is sent, observed against LangDock on 2026-11-09. Every effort choice maps to `none`; the model
+  // reasons, so the row says optional with None accepted. Window and output are the gpt-6 family's, not checked for this model.
+  { id: 'gpt-6-1-terra-chat', match: /^gpt-6\.1-terra$/, kinds: ['openai-compatible', 'openrouter'], ...cloud(1_048_576, 65_536), reasoning: 'optional', wire: { none: 'none', low: 'none', medium: 'none', high: 'none' }, toolsNeedNone: true, checked: '2026-11-09', source: 'https://docs.langdock.com/en/developer/completion-api/openai' },
   { id: 'o-series', match: range('oV(?:-(?:mini|pro))?'), since: '3', ...cloud(200_000, 100_000), reasoning: 'always', checked: D, source: 'https://developers.openai.com/api/docs/models/o3' },
   { id: 'gpt-5-4-pro', match: range('gpt-V-pro'), since: '5.4', ...cloud(1_050_000, 128_000), reasoning: 'always', wire: { low: 'medium' }, checked: D, source: 'https://developers.openai.com/api/docs/models/gpt-5.4-pro; https://developers.openai.com/api/docs/models/gpt-5.5-pro' },
   { id: 'gpt-5-2-pro', match: range('gpt-V-pro'), since: '5.2', ...cloud(400_000, 128_000), reasoning: 'always', wire: { low: 'medium' }, checked: D, source: 'https://developers.openai.com/api/docs/models/gpt-5.2-pro' },

@@ -109,19 +109,23 @@ export function resolveProfile(input: ProfileInput): ModelProfile {
 
 /**
  * What Test models's probes still need to find out: whether None is accepted, for a model that reasons or may, with
- * None's value through the row's map; and whether the model sees images, when that is a guess.
+ * None's value through the row's map; and whether the model sees images, when that is a guess. `toolsNone` says the
+ * endpoint's chat completions take function tools only beside an explicit `none` (the row says so), so the probe
+ * itself carries the value rather than nothing, which the server would replace with its own default.
  */
 export function probeAsk(input: ProfileInput): {
   reasons?: boolean;
   none: boolean;
   noneWire?: WireEffort;
   image: boolean;
+  toolsNone?: boolean;
 } {
   const { row, reasons, acceptsNone, visionStated } = reasoningFacts(input);
   return {
     ...(reasons !== undefined ? { reasons } : {}),
     none: reasons !== false && acceptsNone === undefined,
     ...(row?.wire?.none ? { noneWire: row.wire.none } : {}),
+    ...(row?.toolsNeedNone ? { toolsNone: true } : {}),
     image: !visionStated,
   };
 }

@@ -14,6 +14,7 @@ const NOTHING: Wire = [undefined, undefined, undefined, undefined];
 const UNKNOWN: Wire = [undefined, 'low', 'medium', 'high'];
 const PRO: Wire = ['medium', 'medium', 'medium', 'high'];
 const HIGH_FOR_MEDIUM: Wire = ['low', 'low', 'high', 'high'];
+const NONE_FOR_ALL: Wire = ['none', 'none', 'none', 'none'];
 
 /** The OpenAI-compatible card at a public host unless a case says otherwise. */
 const CLOUD_URL = 'https://api.example.com/v1';
@@ -84,6 +85,10 @@ const MATRIX: Array<[ProviderKind, string, string | null, ReasoningSupport | und
   ['openai', 'gpt-3.5-turbo', 'gpt-old', 'none', NOTHING],
   ['openai', 'unknown-model', null, undefined, UNKNOWN],
   ['openrouter', 'openai/gpt-oss-120b', 'gpt-oss-cloud', 'optional', ALL],
+  // Every effort is none on the wire for a chat-completions endpoint that takes tools only at `none`.
+  ['openai-compatible', 'gpt-6.1-terra', 'gpt-6-1-terra-chat', 'optional', NONE_FOR_ALL, LOCAL_URL],
+  ['openrouter', 'gpt-6.1-terra', 'gpt-6-1-terra-chat', 'optional', NONE_FOR_ALL],
+  ['openai', 'gpt-6.1-terra', 'gpt-6', 'always', ALWAYS],
   ['openrouter', 'openai/gpt-next', 'openai-family', 'always', ALWAYS],
   // Google
   ['gemini', 'gemini-3-pro-preview', 'gemini-3-pro-preview', 'always', HIGH_FOR_MEDIUM],
@@ -194,6 +199,12 @@ describe('the catalogue', () => {
   it('names every row at least once', () => {
     const named = new Set(MATRIX.map(m => m[2]));
     expect(rows.map(r => r.id).filter(id => !named.has(id))).toEqual([]);
+  });
+
+  it('maps every effort to None on the wire when tools require None', () => {
+    expect(rows.filter(r => r.toolsNeedNone).every(r => REASONING_EFFORTS.every(e => r.wire?.[e] === 'none'))).toBe(
+      true,
+    );
   });
 
   it('has unique ids, a date and a source on every row, and a version group on every range', () => {

@@ -29,6 +29,8 @@ export interface ProbeAsk {
   none?: boolean;
   /** None's value on the wire, through the row's map (`minimal` for GPT-5); `none` otherwise. */
   noneWire?: WireEffort;
+  /** Function tools are taken only beside an explicit `none` (the row says so): the probe carries the value. */
+  toolsNone?: boolean;
   /** The model's vision is a guess: run the image probe. */
   image?: boolean;
 }
@@ -54,9 +56,9 @@ const PROBE_TOOL = {
 };
 
 /**
- * Sends one request with one tool and checks that the reply is a call to it; then the probes, each one short request
- * without the run's fallback: the effort probe on the chat-completions kinds, the None probe and the image probe when
- * `ask` says the fact is unknown.
+ * Sends one request with one tool, beside an explicit `none` when the server needs it, and checks that the reply is a
+ * call to it; then the probes, each one short request without the run's fallback: the effort probe on the
+ * chat-completions kinds, the None probe and the image probe when `ask` says the fact is unknown.
  */
 export async function testConnection(
   spec: ModelSpec,
@@ -69,6 +71,9 @@ export async function testConnection(
     system: 'You are testing a tool connection. Call the tool report_status with status "ok". Do not write text.',
     messages: [{ role: 'user', content: 'Call report_status now.' }],
     tools: PROBE_TOOL,
+    // A server that replaces a missing effort with its own default and refuses tools beside it takes the probe's own
+    // `none` in its place (LangDock does this for its GPT-6.1 models).
+    ...(ask.toolsNone ? { reasoning: 'none' as const } : {}),
     retry: { attempts: 1, baseMs: 0, maxMs: 0 },
   };
   const result = await streamTurn(probe);
@@ -94,7 +99,10 @@ export async function testConnection(
 
   // The effort probe: Low, then Medium, then High, to the first accepted. "Reasons: no" only when all are refused,
   // since a model can refuse one level and take another; reasoning tokens in an accepted reply mean it reasons.
-  if (CHAT_COMPLETIONS_KINDS.includes(spec.kind)) {
+  // It runs only when no source has already said whether the model reasons (ask.reasons); the probe asks what nothing
+  // said, and a server that refuses every level does not get to overwrite a row's word (a gateway may refuse effort
+  // alongside tools while the model, per the row, still takes its effort elsewhere).
+  if (CHAT_COMPLETIONS_KINDS.includes(spec.kind) && ask.reasons === undefined) {
     let allRefused = true;
     for (const level of ['low', 'medium', 'high'] as const) {
       const r = await once({ reasoning: level });
